@@ -132,6 +132,10 @@ void APythonCommunicator::OnWebSocketMessageReceived(const FString& Message)
             ResponseData.audio = AccumulatedAudio;
             OnResponseReady.Broadcast(ResponseData);
             AccumulatedAudio.Empty();  // Clear the accumulated data for the next audio
+
+            // Send a confirmation message back to the WebSocket server
+            FString confirmationMessage = TEXT("{\"type\": \"audio_end_ack\", \"data\": \"Audio processing completed.\"}");
+            WebSocket->Send(confirmationMessage);
         }
         else if (RequestType == "text")
         {
