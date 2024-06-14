@@ -16,6 +16,13 @@ APythonCommunicator::APythonCommunicator()
     PrimaryActorTick.bCanEverTick = true;
 }
 
+void APythonCommunicator::SendAnimationEnd()
+{
+    // Send a confirmation message back to the WebSocket server
+    FString confirmationMessage = TEXT("{\"type\": \"animation_end_ack\", \"data\": \"Recieved animation request.\"}");
+    WebSocket->Send(confirmationMessage);
+}
+
 // Called when the game starts or when spawned
 void APythonCommunicator::BeginPlay()
 {
@@ -122,6 +129,7 @@ void APythonCommunicator::OnWebSocketMessageReceived(const FString& Message)
             if (SoundWave)
             {
                 ResponseData.SoundWave = SoundWave;
+                AccumulatedResponse.SoundWave = SoundWave;
                 UE_LOG(LogTemp, Log, TEXT("SoundWave created successfully"));
             }
             else
@@ -130,17 +138,39 @@ void APythonCommunicator::OnWebSocketMessageReceived(const FString& Message)
             }
 
             ResponseData.audio = AccumulatedAudio;
-            OnResponseReady.Broadcast(ResponseData);
+            AccumulatedResponse.SoundWaves.Add(SoundWave);
+            AccumulatedResponse.Durations.Add(JsonObject->GetStringField("duration"));
             AccumulatedAudio.Empty();  // Clear the accumulated data for the next audio
 
             // Send a confirmation message back to the WebSocket server
             FString confirmationMessage = TEXT("{\"type\": \"audio_end_ack\", \"data\": \"Audio processing completed.\"}");
             WebSocket->Send(confirmationMessage);
         }
-        else if (RequestType == "text")
+        else if (RequestType == "response_end")
         {
-            ResponseData.text = JsonObject->GetStringField("data");
-            OnResponseReady.Broadcast(ResponseData);
+            // Send a confirmation message back to the WebSocket server
+            FString confirmationMessage = TEXT("{\"type\": \"response_end_ack\", \"data\": \"Recieved end of message.\"}");
+            WebSocket->Send(confirmationMessage);
+
+            OnResponseReady.Broadcast(AccumulatedResponse);
+            AccumulatedResponse.SoundWaves.Reset();
+            AccumulatedResponse.AnimationTags.Reset();
+            AccumulatedResponse.Durations.Reset();
+        }
+        else if (RequestType == "animation")
+        {
+            FString Facial_Expression = JsonObject->GetStringField("facial_expression");
+            if (Facial_Expression == "True") {
+                AccumulatedResponse.AnimationTags.Add(JsonObject->GetStringField("data"));
+            }
+            else if (Facial_Expression == "False") {
+                ResponseData.text = JsonObject->GetStringField("data");
+                OnResponseReady.Broadcast(ResponseData);
+            }
+
+            // Send a confirmation message back to the WebSocket server
+            FString confirmationMessage = TEXT("{\"type\": \"animation_ack\", \"data\": \"Recieved animation request.\"}");
+            WebSocket->Send(confirmationMessage);
         }
     }
     else

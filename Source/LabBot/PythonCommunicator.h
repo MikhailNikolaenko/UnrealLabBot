@@ -20,6 +20,18 @@ struct FResponseResult
 
     UPROPERTY(BlueprintReadOnly)
     USoundWave* SoundWave;  // Add SoundWave pointer
+
+    UPROPERTY(BlueprintReadOnly)
+    TArray<FString> AnimationTags;
+    
+    // Array of sound wave pointers
+    UPROPERTY(BlueprintReadOnly)
+    TArray<USoundWave*> SoundWaves;
+
+    // Array of durations corresponding to each sound wave
+    UPROPERTY(BlueprintReadOnly)
+    TArray<FString> Durations;
+
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResponseReady, const FResponseResult&, ResponseData);
@@ -32,6 +44,9 @@ class LABBOT_API APythonCommunicator : public AActor
 public:
     // Sets default values for this actor's properties
     APythonCommunicator();
+
+    UFUNCTION(BlueprintCallable, Category = "WebSocket")
+    void SendAnimationEnd();
 
 protected:
     // Called when the game starts or when spawned
@@ -52,6 +67,7 @@ private:
     TSharedPtr<IWebSocket> WebSocket;
     bool bWebSocketClosed;
     TArray<uint8> AccumulatedAudio;  // Variable to store accumulated audio data
+    FResponseResult AccumulatedResponse;
 
     void StartWebSocketServer();
     void StopWebSocketServer();
