@@ -8,6 +8,8 @@
 #include "Misc/FileHelper.h"
 #include "HAL/PlatformFilemanager.h"
 #include "AudioDevice.h"
+#include "Misc/SecureHash.h"
+
 
 // Sets default values
 APythonCommunicator::APythonCommunicator()
@@ -103,6 +105,25 @@ void APythonCommunicator::OnWebSocketClosed(int32 StatusCode, const FString& Rea
 
 }
 
+// Function to compute checksum
+FString ComputeChecksum(const TArray<uint8>& Data)
+{
+    FSHA1 HashState;
+    HashState.Update(Data.GetData(), Data.Num());
+    HashState.Final();
+
+    uint8 Hash[FSHA1::DigestSize];
+    HashState.GetHash(Hash);
+
+    FString Checksum;
+    for (uint8 Byte : Hash)
+    {
+        Checksum += FString::Printf(TEXT("%02x"), Byte);
+    }
+
+    return Checksum;
+}
+
 void APythonCommunicator::OnWebSocketMessageReceived(const FString& Message)
 {
     UE_LOG(LogTemp, Log, TEXT("Received message: %s"), *Message);
@@ -121,38 +142,53 @@ void APythonCommunicator::OnWebSocketMessageReceived(const FString& Message)
             TArray<uint8> AudioBytes;
             FBase64::Decode(AudioData, AudioBytes);
             AccumulatedAudio.Append(AudioBytes);
+            UE_LOG(LogTemp, Log, TEXT("Received chunk: %s"), *AudioData);
         }
         else if (RequestType == "audio_end")
         {
-            // Create a SoundWave from the accumulated audio bytes
-            USoundWave* SoundWave = CreateSoundWaveFromBytes(AccumulatedAudio);
-            if (SoundWave)
-            {
-                ResponseData.SoundWave = SoundWave;
-                AccumulatedResponse.SoundWave = SoundWave;
-                UE_LOG(LogTemp, Log, TEXT("SoundWave created successfully"));
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("Failed to create SoundWave"));
-            }
+            //// Create a SoundWave from the accumulated audio bytes
+            //FString Checksum = JsonObject->GetStringField("checksum");
+            //FString ComputedChecksum = ComputeChecksum(AccumulatedAudio);
 
-            ResponseData.audio = AccumulatedAudio;
-            AccumulatedResponse.SoundWaves.Add(SoundWave);
-            AccumulatedResponse.Durations.Add(JsonObject->GetStringField("duration"));
-            AccumulatedAudio.Empty();  // Clear the accumulated data for the next audio
+            //if (Checksum == ComputedChecksum)
+            //{
+            //    UE_LOG(LogTemp, Log, TEXT("Checksum matched: %s"), *Checksum);
+            //}
+            //else
+            //{
+            //    UE_LOG(LogTemp, Error, TEXT("Checksum mismatch: received %s, computed %s"), *Checksum, *ComputedChecksum);
+            //}
+                
+                USoundWave* SoundWave = CreateSoundWaveFromBytes(AccumulatedAudio);
+                if (SoundWave)
+                {
+                    ResponseData.SoundWave = SoundWave;
+                    AccumulatedResponse.SoundWave = SoundWave;
+                    UE_LOG(LogTemp, Log, TEXT("SoundWave created successfully"));
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error, TEXT("Failed to create SoundWave"));
+                }
 
-            // Send a confirmation message back to the WebSocket server
-            FString confirmationMessage = TEXT("{\"type\": \"audio_end_ack\", \"data\": \"Audio processing completed.\"}");
-            WebSocket->Send(confirmationMessage);
-        }
+                ResponseData.audio = AccumulatedAudio;
+                AccumulatedResponse.SoundWaves.Add(SoundWave);
+                AccumulatedResponse.Durations.Add(JsonObject->GetStringField("duration"));
+                AccumulatedAudio.Empty();  // Clear the accumulated data for the next audio
+                UE_LOG(LogTemp, Log, TEXT("Cleared accumulated data"));
+
+                // Send a confirmation message back to the WebSocket server
+                FString confirmationMessage = TEXT("{\"type\": \"audio_end_ack\", \"data\": \"Audio processing completed.\"}");
+                WebSocket->Send(confirmationMessage);
+            }
         else if (RequestType == "response_end")
         {
             // Send a confirmation message back to the WebSocket server
             FString confirmationMessage = TEXT("{\"type\": \"response_end_ack\", \"data\": \"Recieved end of message.\"}");
             WebSocket->Send(confirmationMessage);
 
-            OnResponseReady.Broadcast(AccumulatedResponse);
+            BackupResponse = AccumulatedResponse;
+            OnResponseReady.Broadcast(BackupResponse);
             AccumulatedResponse.SoundWaves.Reset();
             AccumulatedResponse.AnimationTags.Reset();
             AccumulatedResponse.Durations.Reset();

@@ -68,6 +68,7 @@ private:
     bool bWebSocketClosed;
     TArray<uint8> AccumulatedAudio;  // Variable to store accumulated audio data
     FResponseResult AccumulatedResponse;
+    FResponseResult BackupResponse;
 
     void StartWebSocketServer();
     void StopWebSocketServer();
